@@ -12,7 +12,7 @@
     typeof (Y) y_ = (Y);          \
     (x_ < y_) ? x_ : y_; })*/
 
-enum Mode { OFF, HYPERION_UDP, STATIC_COLOR, RAINBOW, FIRE2012 };
+enum Mode { NONE, OFF, HYPERION_UDP, STATIC_COLOR, RAINBOW, FIRE2012 };
 
 #endif
 

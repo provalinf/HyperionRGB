@@ -46,3 +46,13 @@ void WrapperWiFi::begin(void) {
   Log.info("Connected successfully, IP address: %s", WiFi.localIP().toString().c_str());
 }
 
+void WrapperWiFi::reconnect(void) {
+  if (!checkConnected()) {
+    Log.info("Wifi déconnecté, reconnexion");
+    WiFi.reconnect();
+  }
+}
+
+boolean WrapperWiFi::checkConnected(void) {
+  return WiFi.status() == WL_CONNECTED;
+}

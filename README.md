@@ -1,4 +1,13 @@
-# Hyperion LED Controller for ESP8266/ESP32
+# Modified version for ESP32 fixing some problems
+I used PlatformIO extension for VScode.
+
+* v1.0
+	- Unstable wireless connection (after several days)
+	- Added 3x flashing when the ESP is power on (useful when you have unsoldered the power led)
+
+
+# Initial readme
+## Hyperion LED Controller for ESP8266/ESP32
 
 This code allows you to use a ESP8266/ESP32 with a fitting led strip as extension for [hyperion](https://github.com/hyperion-project) (ambilight clone).
 You need to configure hyperion to stream the leds as UDP to the esp.
@@ -10,15 +19,15 @@ French Tutorial: https://ambimod.jimdo.com/2017/01/12/tuto-faire-de-l-ambilight-
 German Tutorial: https://forum-raspberrypi.de/forum/thread/25242-tutorial-esp8266-nodemcu-addon-wifi-led-controller-udp/
 
 Tested with following following libraries (other versions may work):
-# IDE
+## IDE
 a) Arduino IDE 1.8.5
 
-# Board Library
+## Board Library
 a) esp8266 2.4.1 http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
 b) for esp32 https://github.com/espressif/arduino-esp32
 
-# Libraries
+## Libraries
 a) ArduinoThread 2.1.1
 
 b) ArduinoJSON 5.12.0
@@ -31,9 +40,9 @@ e) Logging https://github.com/SciLor/Arduino-logging-library - install manually:
 
 f) ESP32 Webserver https://github.com/nhatuan84/esp32-webserver - install manually (for esp32 only)
 
-# Installation
+## Installation
 
-# Configuration of the board
+## Configuration of the board
 1. Go to the `HyperionRGB` folder and create a copy of `ConfigStatic.h.example`. Remove the `.example` suffix
 2. Configure the `ConfigStatic.h` for your needs:
    - Select your LED chip type. All LEDs of the [FastLed](https://github.com/FastLED/FastLED) libraries are supported
@@ -44,7 +53,7 @@ f) ESP32 Webserver https://github.com/nhatuan84/esp32-webserver - install manual
 3. Open the `HyperionRGB.ino` the Arduino IDE
 4. Compile and upload to your board
 
-# Configuration of Hyperion
+## Configuration of Hyperion
 You need two running hyperion instances. The first grabs the data on e.g. a rasbperry pi and controls any local attached LED strips. This first instance is configured to forward its data to a second hyperion instance on the same machine. Be sure to only forward the UDP data:
 
 ```

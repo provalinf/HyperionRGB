@@ -15,7 +15,7 @@
 
 #include "WrapperWebconfig.h"
 
-#define LED LED_BUILTIN // LED in NodeMCU at pin GPIO16 (D0) or LED_BUILTIN @Lolin32.
+#define LED 2 // LED in NodeMCU at pin GPIO16 (D0) or LED_BUILTIN @Lolin32.
 int ledState = LOW;
 
 LoggerInit loggerInit;
@@ -32,15 +32,23 @@ WrapperJsonServer jsonServer;
   WrapperWebconfig webServer;
 #endif
 
-Mode activeMode;
-boolean autoswitch;
+Mode activeMode = NONE;
+boolean autoswitch, initDone;
 
 ThreadController threadController = ThreadController();
 Thread statusThread = Thread();
 EnhancedThread animationThread = EnhancedThread();
 EnhancedThread resetThread = EnhancedThread();
 
+int ledAllumeeCompteur = 3;
+
 void statusInfo(void) {
+  if(ledAllumeeCompteur <= 0) {
+     threadController.remove(&statusThread);
+     interrupts();
+  }
+  ledAllumeeCompteur--;
+  
   if (ledState == LOW) {
     ledState = HIGH;
   } else {
@@ -86,7 +94,7 @@ void changeMode(Mode newMode, int interval = 0) {
         animationThread.setInterval(interval);
         break;
       case HYPERION_UDP:
-        if (!autoswitch)
+        if (!autoswitch && initDone)
           udpLed.begin();
     }
     if (interval > 0)
@@ -124,7 +132,12 @@ void resetMode(void) {
   #else
     changeMode(CONFIG_LED_STANDARD_MODE);
   #endif
-  resetThread.enabled = false;
+  
+  if (CONFIG_LED_STANDARD_MODE == OFF) {
+    Log.info("Boucle d'inactivité");
+    resetThread.enabled = true;
+    wifi.reconnect();
+  }
 }
 
 void initConfig(void) {
@@ -190,6 +203,7 @@ void handleEvents(void) {
 }
 
 void setup(void) {
+  initDone = false;
   LoggerInit loggerInit = LoggerInit(115200);
   
   initConfig();
@@ -218,6 +232,11 @@ void setup(void) {
 
   wifi.begin();
 
+//  uint8_t mac[6];
+//  esp_efuse_mac_get_default(mac);
+//  Serial.begin(115200);
+//  Serial.printf("\nAdresse mac : %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
   #ifdef CONFIG_ENABLE_WEBCONFIG
     webServer = WrapperWebconfig();
     webServer.begin();
@@ -239,6 +258,7 @@ void setup(void) {
 
   pinMode(LED, OUTPUT);   // LED pin as output.
   Log.info("HEAP=%i", ESP.getFreeHeap());
+  initDone = true;
 }
 
 void loop(void) {

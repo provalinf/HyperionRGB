@@ -17,6 +17,8 @@ class WrapperWiFi {
     WrapperWiFi(const char* ssid, const char* password);
     WrapperWiFi(const char* ssid, const char* password, const byte ip[4], const byte subnet[4], const byte dns[4]);
     void begin(void);
+    void reconnect(void);
+    boolean checkConnected(void);
   private:
     const char* _ssid;
     const char* _password;
