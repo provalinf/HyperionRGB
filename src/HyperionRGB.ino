@@ -1,3 +1,4 @@
+#include <Arduino.h>
 
 #include <Thread.h>
 #include <ThreadController.h>
@@ -13,9 +14,14 @@
 #include "WrapperUdpLed.h"
 #include "WrapperJsonServer.h"
 
+#include <WiFiManager.h>
 #include "WrapperWebconfig.h"
 
+#if defined(ESP8266)
+#define LED LED_BUILTIN
+#elif defined(ESP32)
 #define LED 2 // LED in NodeMCU at pin GPIO16 (D0) or LED_BUILTIN @Lolin32.
+#endif
 int ledState = LOW;
 
 LoggerInit loggerInit;
@@ -28,9 +34,12 @@ WrapperLedControl ledStrip;
 WrapperUdpLed udpLed;
 WrapperJsonServer jsonServer;
 
-#ifdef CONFIG_ENABLE_WEBCONFIG
-  WrapperWebconfig webServer;
+#if defined(ESP32)
+WebServer server(80);
 #endif
+
+WiFiManager wifiManager;
+WrapperWebconfig webServer;
 
 Mode activeMode = NONE;
 boolean autoswitch, initDone;
@@ -43,234 +52,210 @@ EnhancedThread resetThread = EnhancedThread();
 int ledAllumeeCompteur = 3;
 
 void statusInfo(void) {
-  if(ledAllumeeCompteur <= 0) {
-     threadController.remove(&statusThread);
-     interrupts();
-  }
-  ledAllumeeCompteur--;
-  
-  if (ledState == LOW) {
-    ledState = HIGH;
-  } else {
-    ledState = LOW;
-    Log.debug("HEAP=%i", ESP.getFreeHeap());
-  }
-  digitalWrite(LED, ledState);
+	if (ledAllumeeCompteur <= 0) {
+		threadController.remove(&statusThread);
+		interrupts();
+	}
+	ledAllumeeCompteur--;
+
+	if (ledState == LOW) {
+		ledState = HIGH;
+	} else {
+		ledState = LOW;
+		Log.debug("HEAP=%i", ESP.getFreeHeap());
+	}
+	digitalWrite(LED, ledState);
 }
 
 void animationStep() {
-  switch (activeMode) {
-    case RAINBOW:
-      ledStrip.rainbowStep();
-      break;
-    case FIRE2012:
-      ledStrip.fire2012Step();
-      break;
-  }
+	switch (activeMode) {
+		case RAINBOW:
+			ledStrip.rainbowStep();
+			break;
+		case FIRE2012:
+			ledStrip.fire2012Step();
+			break;
+	}
 }
 
 void changeMode(Mode newMode, int interval = 0) {
-  if (newMode != activeMode) {
-    Log.info("Mode changed to %i", newMode);
-    activeMode = newMode;
-    if (!autoswitch)
-      udpLed.stop();
-    
-    switch (activeMode) {
-      case OFF:
-        ledStrip.clear();
-        ledStrip.show();
-        break;
-      case STATIC_COLOR:
-        break;
-      case RAINBOW:
-        if (interval == 0)
-          interval = 500;
-        animationThread.setInterval(interval);
-        break;
-      case FIRE2012:
-        if (interval == 0)
-          interval = 16;
-        animationThread.setInterval(interval);
-        break;
-      case HYPERION_UDP:
-        if (!autoswitch && initDone)
-          udpLed.begin();
-    }
-    if (interval > 0)
-      Log.debug("Interval set to %ims", interval);
-  }
+	if (newMode != activeMode) {
+		Log.info("Mode changed to %i", newMode);
+		activeMode = newMode;
+		if (!autoswitch)
+			udpLed.stop();
+
+		switch (activeMode) {
+			case OFF:
+				ledStrip.clear();
+				ledStrip.show();
+				break;
+			case STATIC_COLOR:
+				break;
+			case RAINBOW:
+				if (interval == 0)
+					interval = 500;
+				animationThread.setInterval(interval);
+				break;
+			case FIRE2012:
+				if (interval == 0)
+					interval = 16;
+				animationThread.setInterval(interval);
+				break;
+			case HYPERION_UDP:
+				if (!autoswitch && initDone)
+					udpLed.begin();
+		}
+		if (interval > 0)
+			Log.debug("Interval set to %ims", interval);
+	}
 }
 
 void updateLed(int id, byte r, byte g, byte b) {
-  if (activeMode == HYPERION_UDP) {
-    Log.verbose("LED %i, r=%i, g=%i, b=%i", id + 1, r, g, b);
-    ledStrip.leds[id].setRGB(r, g, b);
-  }
+	if (activeMode == HYPERION_UDP) {
+		Log.verbose("LED %i, r=%i, g=%i, b=%i", id + 1, r, g, b);
+		ledStrip.leds[id].setRGB(r, g, b);
+	}
 }
+
 void refreshLeds(void) {
-  if (activeMode == HYPERION_UDP) {
-    Log.debug("refresh LEDs");
-    ledStrip.show();
-    if (autoswitch)
-      resetThread.reset();
-  } else if (autoswitch) {
-    changeMode(HYPERION_UDP);
-    Log.info("Autoswitch to HYPERION_UDP");
-  }
+	if (activeMode == HYPERION_UDP) {
+		Log.debug("refresh LEDs");
+		ledStrip.show();
+		if (autoswitch)
+			resetThread.reset();
+	} else if (autoswitch) {
+		changeMode(HYPERION_UDP);
+		Log.info("Autoswitch to HYPERION_UDP");
+	}
 }
 
 void ledColorWipe(byte r, byte g, byte b) {
-  Log.debug("LED color wipe: r=%i, g=%i, b=%i", r, g, b);
-  changeMode(STATIC_COLOR);
-  ledStrip.fillSolid(r, g, b);
+	Log.debug("LED color wipe: r=%i, g=%i, b=%i", r, g, b);
+	changeMode(STATIC_COLOR);
+	ledStrip.fillSolid(r, g, b);
 }
+
 void resetMode(void) {
-  Log.info("Reset Mode");
-  #ifdef CONFIG_ENABLE_WEBCONFIG
-    changeMode(static_cast<Mode>(Config::getConfig()->led.idleMode));
-  #else
-    changeMode(CONFIG_LED_STANDARD_MODE);
-  #endif
-  
-  if (CONFIG_LED_STANDARD_MODE == OFF) {
-    Log.info("Boucle d'inactivité");
-    resetThread.enabled = true;
-    wifi.reconnect();
-  }
+	Log.info("Reset Mode");
+	changeMode(static_cast<Mode>(Config::getConfig()->led.idleMode));
+
+	if (CONFIG_LED_STANDARD_MODE == OFF) {
+		Log.info("Inactivity loop");
+		resetThread.enabled = true;
+		wifi.reconnect();
+	}
 }
 
 void initConfig(void) {
-  #if defined(CONFIG_OVERWRITE_WEBCONFIG) && defined(CONFIG_ENABLE_WEBCONFIG)
-    Config::loadStaticConfig();
-  #endif
+	const char *ssid;
+	const char *password;
 
-  const char* ssid;
-  const char* password;
-  const byte* ip;
-  const byte* subnet;
-  const byte* dns;
-  uint16_t jsonServerPort;
-  uint16_t udpLedPort;
+	ConfigStruct *cfg = Config::getConfig();
+	Config::logConfig();
 
-  #ifdef CONFIG_ENABLE_WEBCONFIG
-    //TODO Fallback
-    ConfigStruct* cfg = Config::getConfig();
-    
-    ssid = cfg->wifi.ssid;
-    password = cfg->wifi.password;
-    ip = Config::cfg2ip(cfg->wifi.ip);
-    subnet = Config::cfg2ip(cfg->wifi.subnet);
-    dns = Config::cfg2ip(cfg->wifi.dns);
-    jsonServerPort = cfg->ports.jsonServer;
-    udpLedPort = cfg->ports.udpLed;
-    autoswitch = cfg->led.autoswitch;
-    
-    Log.info("CFG=%s", "EEPROM config loaded");
-    Config::logConfig();
-  #else
-    ssid = CONFIG_WIFI_SSID;
-    password = CONFIG_WIFI_PASSWORD;
-    #ifdef CONFIG_WIFI_STATIC_IP
-      ip = CONFIG_WIFI_IP;
-      subnet = CONFIG_WIFI_SUBNET;
-      dns = CONFIG_WIFI_DNS;
-    #else
-      const byte empty[4] = {0};
-      ip = empty;
-    #endif
-    jsonServerPort = CONFIG_PORT_JSON_SERVER;
-    udpLedPort = CONFIG_PORT_UDP_LED;
-    autoswitch = CONFIG_LED_HYPERION_AUTOSWITCH;
-    
-    Log.info("CFG=%s", "Static config loaded");
-  #endif
-  
-  wifi = WrapperWiFi(ssid, password, ip, subnet, dns);
-  udpLed = WrapperUdpLed(CONFIG_LED_COUNT, udpLedPort);
-  jsonServer = WrapperJsonServer(CONFIG_LED_COUNT, jsonServerPort);
+	ssid = cfg->wifi.ssid;
+	password = cfg->wifi.password;
+	autoswitch = cfg->led.autoswitch;
+
+	wifiManager.autoConnect(cfg->wifi.hostname);
+
+	if (strcmp(wifiManager.getWiFiSSID(true).c_str(), ssid) != 0
+		|| strcmp(wifiManager.getWiFiPass(true).c_str(), password) != 0) {
+		strcpy(cfg->wifi.ssid, wifiManager.getWiFiSSID(true).c_str());
+		strcpy(cfg->wifi.password, wifiManager.getWiFiPass(true).c_str());
+		Config::saveEEPROMConfig();
+	}
+
+	Log.info("WifiManager SSID %s", wifiManager.getWiFiSSID(true).c_str());
+	Log.debug("WifiManager PASSWD %s", wifiManager.getWiFiPass(true).c_str());
+
+	wifi = WrapperWiFi(ssid, password, Config::cfg2ip(cfg->wifi.ip), Config::cfg2ip(cfg->wifi.subnet),
+					   Config::cfg2ip(cfg->wifi.dns));
+	udpLed = WrapperUdpLed(cfg->led.nbLed, cfg->ports.udpLed);
+	jsonServer = WrapperJsonServer(cfg->led.nbLed, cfg->ports.jsonServer);
 }
 
 void handleEvents(void) {
-  ota.handle();
-  udpLed.handle();
-  jsonServer.handle();
-  #ifdef CONFIG_ENABLE_WEBCONFIG
-    webServer.handle();
-  #endif
+	ota.handle();
+	udpLed.handle();
+	jsonServer.handle();
 
-  threadController.run();
+	#ifdef CONFIG_ENABLE_WEBCONFIG
+	webServer.handle();
+	#endif
+
+	threadController.run();
 }
 
 void setup(void) {
-  initDone = false;
-  LoggerInit loggerInit = LoggerInit(115200);
-  
-  initConfig();
-  ota = WrapperOTA();
-  ledStrip = WrapperLedControl();
+	initDone = false;
+	LoggerInit loggerInit = LoggerInit(115200);
 
-  statusThread.onRun(statusInfo);
-  statusThread.setInterval(5000);
-  threadController.add(&statusThread);
+	initConfig();
+	ota = WrapperOTA();
+	ledStrip = WrapperLedControl();
 
-  animationThread.onRun(animationStep);
-  animationThread.setInterval(1000);
-  
-  resetThread.onRun(resetMode);
-  #ifdef CONFIG_ENABLE_WEBCONFIG
-    resetThread.setInterval(Config::getConfig()->led.timeoutMs);
-  #else
-    resetThread.setInterval(CONFIG_LED_STANDARD_MODE_TIMEOUT_MS);
-  #endif
-  resetThread.enabled = false;
-  threadController.add(&resetThread);
-  
-  ledStrip.begin();
-  resetMode();
-  animationStep();
+	statusThread.onRun(statusInfo);
+	statusThread.setInterval(5000);
+	threadController.add(&statusThread);
 
-  wifi.begin();
+	animationThread.onRun(animationStep);
+	animationThread.setInterval(1000);
+
+	resetThread.onRun(resetMode);
+	resetThread.setInterval(Config::getConfig()->led.timeoutMs);
+	resetThread.enabled = false;
+	threadController.add(&resetThread);
+
+	ledStrip.begin(Config::getConfig()->led);
+	resetMode();
+	animationStep();
+
+	wifi.begin();
 
 //  uint8_t mac[6];
 //  esp_efuse_mac_get_default(mac);
 //  Serial.begin(115200);
 //  Serial.printf("\nAdresse mac : %02X:%02X:%02X:%02X:%02X:%02X\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-  #ifdef CONFIG_ENABLE_WEBCONFIG
-    webServer = WrapperWebconfig();
-    webServer.begin();
-    ota.begin(Config::getConfig()->wifi.hostname);
-  #else
-    ota.begin(CONFIG_WIFI_HOSTNAME); 
-  #endif
+	webServer = WrapperWebconfig();
+	#if defined(ESP32)
+	webServer._server = &server;
+	#endif
+	webServer.begin();
+	#if !defined(CONFIG_ENABLE_WEBCONFIG)
+	webServer._server->close();
+	#endif
 
-  if (autoswitch || activeMode == HYPERION_UDP)
-    udpLed.begin();
-    
-  udpLed.onUpdateLed(updateLed);
-  udpLed.onRefreshLeds(refreshLeds);
+	ota.begin(Config::getConfig()->wifi.hostname);
 
-  jsonServer.begin();
-  jsonServer.onLedColorWipe(ledColorWipe);
-  jsonServer.onClearCmd(resetMode);
-  jsonServer.onEffectChange(changeMode);
+	if (autoswitch || activeMode == HYPERION_UDP)
+		udpLed.begin();
 
-  pinMode(LED, OUTPUT);   // LED pin as output.
-  Log.info("HEAP=%i", ESP.getFreeHeap());
-  initDone = true;
+	udpLed.onUpdateLed(updateLed);
+	udpLed.onRefreshLeds(refreshLeds);
+
+	jsonServer.begin();
+	jsonServer.onLedColorWipe(ledColorWipe);
+	jsonServer.onClearCmd(resetMode);
+	jsonServer.onEffectChange(changeMode);
+
+	pinMode(LED, OUTPUT);   // LED pin as output.
+	Log.info("HEAP=%i", ESP.getFreeHeap());
+	initDone = true;
 }
 
 void loop(void) {
-  handleEvents();
-  switch (activeMode) {
-    case RAINBOW:
-    case FIRE2012:
-      animationThread.runIfNeeded();
-      break;
-    case STATIC_COLOR:
-      break;
-    case HYPERION_UDP:
-      break;
-  }
+	handleEvents();
+	switch (activeMode) {
+		case RAINBOW:
+		case FIRE2012:
+			animationThread.runIfNeeded();
+			break;
+		case STATIC_COLOR:
+			break;
+		case HYPERION_UDP:
+			break;
+	}
 }

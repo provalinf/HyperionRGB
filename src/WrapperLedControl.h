@@ -8,7 +8,7 @@
 class WrapperLedControl {
   public:
     void
-      begin(),
+      begin(ConfigLed ledConfig),
       show(void),
       clear(void),
       fillSolid(CRGB color),
@@ -17,13 +17,16 @@ class WrapperLedControl {
       fire2012Step(void);
 
     CRGB* leds;
+	int _ledCount;
       
   private:       
     CRGB wheel(byte wheelPos);
     byte _rainbowStepState;
     boolean _fire2012Direction;
     byte* _fire2012Heat;
-    int _ledCount;
+
+
+	//static void typeLedDefine(uint8_t typeLed);
 };
 
 #endif

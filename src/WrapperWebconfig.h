@@ -5,8 +5,9 @@
 #if defined(ESP8266)
   #include <ESP8266WebServer.h>
 #elif defined(ESP32)
-  #include <ESP32WebServer.h>
+    #include <WebServer.h>
 #endif
+
 #include <LinkedList.h>
 
 class SelectEntryBase {
@@ -41,8 +42,14 @@ class SelectEntry : public SelectEntryBase {
     T _value;
 };
   
-class WrapperWebconfig {  
+class WrapperWebconfig {
   public:
+    #if defined(ESP8266)
+        ESP8266WebServer* _server = new ESP8266WebServer(80);
+    #elif defined(ESP32)
+        WebServer* _server;
+    #endif
+
     void
       begin(),
       handle(void);
@@ -73,18 +80,14 @@ class WrapperWebconfig {
       initHelperVars(void),
       clearHelperVars(void),
       clearLinkedList(LinkedList<SelectEntryBase*>* target),
-      getIdleModes(uint8_t active, LinkedList<SelectEntryBase*>* target);
+      getIdleModes(uint8_t active, LinkedList<SelectEntryBase*>* target),
+      getLedType(uint8_t active, LinkedList<SelectEntryBase *> *target);
 
     template<typename T>
     T getSelectedEntry(String selectedEntryValue, LinkedList<SelectEntryBase*>* target);
     
     LinkedList<SelectEntryBase*>* _idleModes;
-
-    #if defined(ESP8266)
-      ESP8266WebServer* _server = new ESP8266WebServer(80);
-    #elif defined(ESP32)
-      ESP32WebServer* _server = new ESP32WebServer(80);
-    #endif
+    LinkedList<SelectEntryBase*>* _typesLed;
 };
 
 #endif
